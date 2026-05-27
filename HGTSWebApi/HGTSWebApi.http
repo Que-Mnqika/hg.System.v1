@@ -1,0 +1,6 @@
+@HGTSWebApi_HostAddress = http://localhost:5188
+
+GET {{HGTSWebApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
