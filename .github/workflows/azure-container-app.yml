@@ -16,6 +16,36 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      - name: Verify Azure credentials and subscription
+        env:
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
+          RG: ${{ secrets.AZURE_RESOURCE_GROUP }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${AZURE_CREDENTIALS:-}" ]; then
+            echo "AZURE_CREDENTIALS secret is not set. Please add a service principal JSON to repository secrets as 'AZURE_CREDENTIALS'."
+            exit 1
+          fi
+
+          echo "Checking logged-in account and subscription state..."
+          az account show --query '{name:name,id:id,state:state}' -o json
+
+          SUB_STATE=$(az account show --query "state" -o tsv || true)
+          echo "Subscription state: ${SUB_STATE:-unknown}"
+          if [ "${SUB_STATE:-}" != "Enabled" ]; then
+            echo "Subscription is not Enabled. CI cannot perform write operations."
+            az account show
+            exit 1
+          fi
+
+          echo "Attempting to locate Key Vault in resource group $RG (if provided)."
+          if [ -n "$RG" ]; then
+            az keyvault list -g "$RG" -o table || true
+          else
+            echo "No resource group secret provided; skipping Key Vault lookup."
+          fi
+
       - name: Build and push image to ACR
         env:
           ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
