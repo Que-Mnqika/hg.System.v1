@@ -131,8 +131,8 @@ var app = builder.Build();
 
 // Configure URLs
 app.Urls.Clear();
-app.Urls.Add("http://localhost:5277");
-app.Urls.Add("http://0.0.0.0:5277");
+var port = Environment.GetEnvironmentVariable("PORT") ?? "5277";
+app.Urls.Add($"http://0.0.0.0:{port}");
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

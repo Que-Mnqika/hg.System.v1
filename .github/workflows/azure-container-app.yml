@@ -1,0 +1,70 @@
+name: Build and deploy to Azure Container Apps
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set subscription
+        run: az account set --subscription "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+
+      - name: Build and push image to ACR
+        env:
+          ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
+          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+        run: |
+          IMAGE_NAME=${ACR_LOGIN_SERVER}/${{ github.repository }}:${{ github.sha }}
+          echo "Building $IMAGE_NAME"
+          docker build -t $IMAGE_NAME .
+          echo $ACR_PASSWORD | docker login $ACR_LOGIN_SERVER -u $ACR_USERNAME --password-stdin
+          docker push $IMAGE_NAME
+
+      - name: Deploy to Azure Container Apps
+        env:
+          RG: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          ENV_NAME: ${{ secrets.CONTAINERAPPS_ENV }}
+          CA_NAME: ${{ secrets.CONTAINERAPP_NAME }}
+          ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
+          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+          POSTGRES_HOST: ${{ secrets.POSTGRES_HOST }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          IMAGE_NAME=${ACR_LOGIN_SERVER}/${{ github.repository }}:${{ github.sha }}
+          KEYVAULT_NAME=$(az keyvault list -g "$RG" --query "[0].name" -o tsv)
+          if [ -n "$KEYVAULT_NAME" ]; then
+            VAULT_PASSWORD=$(az keyvault secret show \
+              --vault-name "$KEYVAULT_NAME" \
+              --name "Postgres--AdminPassword" \
+              --query value -o tsv 2>/dev/null || true)
+            if [ -n "$VAULT_PASSWORD" ]; then
+              POSTGRES_PASSWORD="$VAULT_PASSWORD"
+            fi
+          fi
+
+          echo "Creating or updating container app $CA_NAME"
+          az containerapp create \
+            --name $CA_NAME \
+            --resource-group $RG \
+            --environment $ENV_NAME \
+            --image $IMAGE_NAME \
+            --registry-server $ACR_LOGIN_SERVER \
+            --registry-username $ACR_USERNAME \
+            --registry-password $ACR_PASSWORD \
+            --env-vars "ConnectionStrings__DefaultConnection=Host=${POSTGRES_HOST};Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Pooling=true;"
