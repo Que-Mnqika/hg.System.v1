@@ -50,7 +50,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         return;
     }
 
-    options.UseSqlServer(defaultConnection);
+    //options.UseSqlServer(defaultConnection);
 });
 
 // Add CORS policy

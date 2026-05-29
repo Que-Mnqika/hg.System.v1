@@ -109,7 +109,247 @@ namespace HGTSWebApi.Controllers
             }
         }
 
-        // POST /api/devices/register
+        // POST /api/devices
+        [HttpPost]
+        public async Task<ActionResult<DeviceDto>> Create([FromBody] CreateDeviceDto dto)
+        {
+            try
+            {
+                // Check if device identifier already exists
+                var existing = await _context.Devices
+                    .FirstOrDefaultAsync(d => d.DeviceIdentifier == dto.DeviceIdentifier);
+
+                if (existing != null)
+                    return BadRequest(new { error = "Device identifier already exists" });
+
+                var device = new Device
+                {
+                    DeviceId = Guid.NewGuid(),
+                    DeviceIdentifier = dto.DeviceIdentifier,
+                    DeviceName = dto.DeviceName ?? "Unnamed Device",
+                    FirmwareVersion = dto.FirmwareVersion,
+                    HardwareVersion = dto.HardwareVersion,
+                    Location = dto.Location,
+                    Description = dto.Description,
+                    LastSeen = DateTime.UtcNow,
+                    IsOnline = true,
+                    Status = "Online",
+                    RegisteredDate = DateTime.UtcNow,
+                    TripDurationHours = dto.TripDurationHours ?? 6
+                };
+
+                _context.Devices.Add(device);
+                await _context.SaveChangesAsync();
+
+                return Ok(new DeviceDto
+                {
+                    DeviceId = device.DeviceId,
+                    DeviceIdentifier = device.DeviceIdentifier,
+                    DeviceName = device.DeviceName,
+                    FirmwareVersion = device.FirmwareVersion,
+                    HardwareVersion = device.HardwareVersion,
+                    LastSeen = device.LastSeen,
+                    IsOnline = device.IsOnline,
+                    Status = device.Status,
+                    RegisteredDate = device.RegisteredDate,
+                    Location = device.Location,
+                    Description = device.Description,
+                    ActiveTripCount = 0,
+                    TotalBoardingCount = 0,
+                    TripDurationHours = device.TripDurationHours
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating device");
+                return StatusCode(500, new { error = "Internal server error", detail = ex.Message });
+            }
+        }
+
+        // PUT /api/devices/{id}
+        [HttpPut("{id:guid}")]
+        public async Task<IActionResult> Update(Guid id, [FromBody] UpdateDeviceDto dto)
+        {
+            try
+            {
+                var device = await _context.Devices.FindAsync(id);
+                if (device == null)
+                    return NotFound();
+
+                // Check if device identifier is being changed and if it already exists
+                if (!string.IsNullOrEmpty(dto.DeviceIdentifier) && dto.DeviceIdentifier != device.DeviceIdentifier)
+                {
+                    var existing = await _context.Devices
+                        .FirstOrDefaultAsync(d => d.DeviceIdentifier == dto.DeviceIdentifier && d.DeviceId != id);
+
+                    if (existing != null)
+                        return BadRequest(new { error = "Device identifier already exists" });
+
+                    device.DeviceIdentifier = dto.DeviceIdentifier;
+                }
+
+                // Update device name
+                if (!string.IsNullOrEmpty(dto.DeviceName))
+                    device.DeviceName = dto.DeviceName;
+
+                // Update location
+                if (dto.Location != null)
+                    device.Location = dto.Location;
+
+                // Update description
+                if (dto.Description != null)
+                    device.Description = dto.Description;
+
+                // Update firmware version
+                if (!string.IsNullOrEmpty(dto.FirmwareVersion))
+                    device.FirmwareVersion = dto.FirmwareVersion;
+
+                // Update hardware version
+                if (!string.IsNullOrEmpty(dto.HardwareVersion))
+                    device.HardwareVersion = dto.HardwareVersion;
+
+                // Update status
+                if (!string.IsNullOrEmpty(dto.Status))
+                    device.Status = dto.Status;
+
+                // Update trip duration hours
+                if (dto.TripDurationHours.HasValue)
+                {
+                    if (dto.TripDurationHours.Value < 1 || dto.TripDurationHours.Value > 24)
+                        return BadRequest(new { error = "Trip duration must be between 1 and 24 hours" });
+
+                    device.TripDurationHours = dto.TripDurationHours.Value;
+                    device.LastConfigUpdate = DateTime.UtcNow;
+                }
+
+                device.LastSeen = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+
+                return Ok(new
+                {
+                    message = "Device updated successfully",
+                    deviceId = device.DeviceId,
+                    deviceIdentifier = device.DeviceIdentifier,
+                    deviceName = device.DeviceName,
+                    location = device.Location
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating device {Id}", id);
+                return StatusCode(500, new { error = "Internal server error", detail = ex.Message });
+            }
+        }
+
+        // PATCH /api/devices/{id} - Partial update (alternative to PUT)
+        [HttpPatch("{id:guid}")]
+        public async Task<IActionResult> PartialUpdate(Guid id, [FromBody] UpdateDeviceDto dto)
+        {
+            try
+            {
+                var device = await _context.Devices.FindAsync(id);
+                if (device == null)
+                    return NotFound();
+
+                // Check if device identifier is being changed and if it already exists
+                if (!string.IsNullOrEmpty(dto.DeviceIdentifier) && dto.DeviceIdentifier != device.DeviceIdentifier)
+                {
+                    var existing = await _context.Devices
+                        .FirstOrDefaultAsync(d => d.DeviceIdentifier == dto.DeviceIdentifier && d.DeviceId != id);
+
+                    if (existing != null)
+                        return BadRequest(new { error = "Device identifier already exists" });
+
+                    device.DeviceIdentifier = dto.DeviceIdentifier;
+                }
+
+                // Update device name (only if provided)
+                if (!string.IsNullOrEmpty(dto.DeviceName))
+                    device.DeviceName = dto.DeviceName;
+
+                // Update location (only if provided)
+                if (dto.Location != null)
+                    device.Location = dto.Location;
+
+                // Update description (only if provided)
+                if (dto.Description != null)
+                    device.Description = dto.Description;
+
+                // Update firmware version (only if provided)
+                if (!string.IsNullOrEmpty(dto.FirmwareVersion))
+                    device.FirmwareVersion = dto.FirmwareVersion;
+
+                // Update hardware version (only if provided)
+                if (!string.IsNullOrEmpty(dto.HardwareVersion))
+                    device.HardwareVersion = dto.HardwareVersion;
+
+                // Update status (only if provided)
+                if (!string.IsNullOrEmpty(dto.Status))
+                    device.Status = dto.Status;
+
+                // Update trip duration hours (only if provided)
+                if (dto.TripDurationHours.HasValue)
+                {
+                    if (dto.TripDurationHours.Value < 1 || dto.TripDurationHours.Value > 24)
+                        return BadRequest(new { error = "Trip duration must be between 1 and 24 hours" });
+
+                    device.TripDurationHours = dto.TripDurationHours.Value;
+                    device.LastConfigUpdate = DateTime.UtcNow;
+                }
+
+                device.LastSeen = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+
+                return Ok(new
+                {
+                    message = "Device updated successfully",
+                    deviceId = device.DeviceId,
+                    deviceIdentifier = device.DeviceIdentifier,
+                    deviceName = device.DeviceName,
+                    location = device.Location,
+                    status = device.Status,
+                    tripDurationHours = device.TripDurationHours
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error partially updating device {Id}", id);
+                return StatusCode(500, new { error = "Internal server error", detail = ex.Message });
+            }
+        }
+
+        // DELETE /api/devices/{id}
+        [HttpDelete("{id:guid}")]
+        public async Task<IActionResult> Delete(Guid id)
+        {
+            try
+            {
+                var device = await _context.Devices
+                    .Include(d => d.Trips)
+                    .FirstOrDefaultAsync(d => d.DeviceId == id);
+
+                if (device == null)
+                    return NotFound();
+
+                // Check if device has any associated trips
+                if (device.Trips != null && device.Trips.Any())
+                    return BadRequest(new { error = "Cannot delete device with existing trips. Please reassign trips first." });
+
+                _context.Devices.Remove(device);
+                await _context.SaveChangesAsync();
+
+                return Ok(new { message = "Device deleted successfully" });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting device {Id}", id);
+                return StatusCode(500, new { error = "Internal server error", detail = ex.Message });
+            }
+        }
+
+        // POST /api/devices/register (Keep existing)
         [HttpPost("register")]
         [AllowAnonymous]
         public async Task<ActionResult<DeviceDto>> RegisterDevice([FromBody] CreateDeviceDto dto)
@@ -188,7 +428,7 @@ namespace HGTSWebApi.Controllers
             }
         }
 
-        // GET /api/devices/{id}/active-trip
+        // GET /api/devices/{id}/active-trip (Keep existing)
         [HttpGet("{id}/active-trip")]
         [AllowAnonymous]
         public async Task<ActionResult<ActiveTripResponseDto>> GetActiveTripForDevice(string id)
@@ -284,7 +524,7 @@ namespace HGTSWebApi.Controllers
             }
         }
 
-        // POST /api/devices/{id}/telemetry
+        // POST /api/devices/{id}/telemetry (Keep existing)
         [HttpPost("{id:guid}/telemetry")]
         [AllowAnonymous]
         public async Task<IActionResult> Telemetry(Guid id, [FromBody] TelemetryRequestDto request)
@@ -325,7 +565,7 @@ namespace HGTSWebApi.Controllers
             }
         }
 
-        // POST /api/devices/{id}/offline-sync/single
+        // POST /api/devices/{id}/offline-sync/single (Keep existing)
         [HttpPost("{id:guid}/offline-sync/single")]
         [AllowAnonymous]
         public async Task<ActionResult<OfflineSyncResponseDto>> OfflineSyncSingle(
@@ -395,7 +635,7 @@ namespace HGTSWebApi.Controllers
             }
         }
 
-        // POST /api/devices/{id}/offline-sync/bulk
+        // POST /api/devices/{id}/offline-sync/bulk (Keep existing)
         [HttpPost("{id:guid}/offline-sync/bulk")]
         [AllowAnonymous]
         public async Task<ActionResult<OfflineSyncResponseDto>> OfflineSyncBulk(
@@ -477,7 +717,7 @@ namespace HGTSWebApi.Controllers
             }
         }
 
-        // GET /api/devices/{id}/config
+        // GET /api/devices/{id}/config (Keep existing)
         [HttpGet("{id:guid}/config")]
         [AllowAnonymous]
         public async Task<ActionResult<TripConfigDto>> GetDeviceConfig(Guid id)
@@ -505,7 +745,7 @@ namespace HGTSWebApi.Controllers
             }
         }
 
-        // PUT /api/devices/{id}/config
+        // PUT /api/devices/{id}/config (Keep existing)
         [HttpPut("{id:guid}/config")]
         [Authorize(Policy = "AdminOnly")]
         public async Task<IActionResult> UpdateDeviceConfig(
@@ -539,9 +779,8 @@ namespace HGTSWebApi.Controllers
             }
         }
 
-        // POST /api/devices/{id}/config/refresh
+        // POST /api/devices/{id}/config/refresh (Keep existing)
         [HttpPost("{id:guid}/config/refresh")]
-        //[Authorize(Policy = "Operations")]
         public async Task<IActionResult> ForceConfigRefresh(Guid id)
         {
             try
@@ -562,7 +801,7 @@ namespace HGTSWebApi.Controllers
             }
         }
 
-        // POST /api/devices/nfc — Register a new ESP32 NFC reader device
+        // POST /api/devices/nfc — Register a new ESP32 NFC reader device (Keep existing)
         [HttpPost("nfc")]
         [Authorize(Policy = "AdminOnly")]
         public async Task<ActionResult<DeviceDto>> RegisterNfcDevice(

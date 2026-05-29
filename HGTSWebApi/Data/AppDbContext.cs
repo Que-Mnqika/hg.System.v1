@@ -32,6 +32,12 @@ namespace HGTSWebApi.Data
         public DbSet<RouteStop> RouteStops { get; set; }
         public DbSet<TripStop> TripStops { get; set; }
 
+        // NEW: Manifest and Availability Tables
+        public DbSet<VehicleAvailability> VehicleAvailabilities { get; set; }
+        public DbSet<TripManifest> TripManifests { get; set; }
+        public DbSet<TripManifestCredential> TripManifestCredentials { get; set; }
+        public DbSet<TripManifestPassenger> TripManifestPassengers { get; set; }
+
         // Auth Tables
         public DbSet<DashboardUser> DashboardUsers { get; set; }
         public DbSet<StudentAuth> StudentAuths { get; set; }
@@ -111,6 +117,7 @@ namespace HGTSWebApi.Data
                 entity.HasIndex(e => e.ResidenceCode).IsUnique();
                 entity.Property(e => e.ResidenceCode).HasMaxLength(20);
                 entity.Property(e => e.ResidenceName).HasMaxLength(100);
+                entity.Property(e => e.Timezone).HasMaxLength(50);
 
                 entity.HasOne(d => d.Institution)
                     .WithMany(p => p.Residences)
@@ -167,7 +174,7 @@ namespace HGTSWebApi.Data
                 entity.Property(e => e.VehicleId).HasColumnName("BusId");
                 entity.Property(e => e.RegistrationNumber).HasColumnName("BusLabel").HasMaxLength(50);
                 entity.Property(e => e.Status).HasMaxLength(20);
-                entity.Property(e => e.Capacity).HasDefaultValue(50);  // ADD THIS
+                entity.Property(e => e.Capacity).HasDefaultValue(50);
             });
 
             // ============ STUDENT ============
@@ -206,7 +213,7 @@ namespace HGTSWebApi.Data
                 entity.HasIndex(e => e.CredentialUid).IsUnique();
                 entity.HasIndex(e => new { e.CredentialUid, e.CredentialType, e.IsActive });
                 entity.Property(e => e.CredentialUid).HasMaxLength(255);
-                entity.Property(e => e.CredentialType).HasMaxLength(10);
+                entity.Property(e => e.CredentialType).HasMaxLength(20); // Increased to 20
 
                 entity.HasOne(d => d.Student)
                     .WithMany(p => p.Credentials)
@@ -234,7 +241,7 @@ namespace HGTSWebApi.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ============ TRIP (FIXED: NoAction to avoid multiple cascade paths) ============
+            // ============ TRIP ============
             modelBuilder.Entity<Trip>(entity =>
             {
                 entity.HasKey(e => e.TripId);
@@ -266,7 +273,6 @@ namespace HGTSWebApi.Data
                     .HasForeignKey(d => d.ResidenceId)
                     .OnDelete(DeleteBehavior.Restrict);
 
-                // FIX: Change both self‑references to NoAction
                 entity.HasOne(d => d.SwappedFromTrip)
                     .WithMany()
                     .HasForeignKey(d => d.SwappedFromTripId)
@@ -336,16 +342,15 @@ namespace HGTSWebApi.Data
                 entity.Property(e => e.PhoneNumber).HasMaxLength(20);
             });
 
-            // ============ STUDENT AUTH (FIXED: no duplicate FK) ============
+            // ============ STUDENT AUTH ============
             modelBuilder.Entity<StudentAuth>(entity =>
             {
                 entity.HasKey(e => e.AuthId);
                 entity.ToTable("StudentAuths", "dbo");
                 entity.HasIndex(e => e.StudentId).IsUnique();
 
-                // Only one relationship, with Restrict (or Cascade if desired)
                 entity.HasOne(d => d.Student)
-                    .WithOne()
+                    .WithOne(s => s.StudentAuth)
                     .HasForeignKey<StudentAuth>(d => d.StudentId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
@@ -366,20 +371,19 @@ namespace HGTSWebApi.Data
                 entity.ToTable("PanicEvents", "dbo");
             });
 
-            // ============ PANIC CHAT MESSAGE (FIXED: single FK) ============
+            // ============ PANIC CHAT MESSAGE ============
             modelBuilder.Entity<PanicChatMessage>(entity =>
             {
                 entity.HasKey(e => e.PanicChatMessageId);
                 entity.ToTable("PanicChatMessages", "dbo");
 
-                // Remove the duplicate FK by specifying only one relationship
                 entity.HasOne(d => d.PanicEvent)
                     .WithMany()
                     .HasForeignKey(d => d.PanicEventId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ============ TRIP TRANSFER (FIXED: avoid VehicleId1 shadow property) ============
+            // ============ TRIP TRANSFER ============
             modelBuilder.Entity<TripTransfer>(entity =>
             {
                 entity.HasKey(e => e.TransferId);
@@ -398,7 +402,6 @@ namespace HGTSWebApi.Data
                     .HasForeignKey(e => e.NewTripId)
                     .OnDelete(DeleteBehavior.Restrict);
 
-                // Explicitly map VehicleId – prevents shadow property "VehicleId1"
                 entity.HasOne(e => e.Vehicle)
                     .WithMany()
                     .HasForeignKey(e => e.VehicleId)
@@ -410,33 +413,126 @@ namespace HGTSWebApi.Data
                     .OnDelete(DeleteBehavior.SetNull);
             });
 
-            // RouteStop configuration
+            // ============ ROUTE STOP ============
             modelBuilder.Entity<RouteStop>(entity =>
             {
                 entity.HasKey(rs => rs.RouteStopId);
+                entity.ToTable("RouteStops", "dbo");
+                entity.Property(rs => rs.StopOrder).IsRequired();
+
                 entity.HasOne(rs => rs.Route)
                       .WithMany(r => r.RouteStops)
                       .HasForeignKey(rs => rs.RouteId)
                       .OnDelete(DeleteBehavior.Cascade);
+
                 entity.HasOne(rs => rs.Residence)
                       .WithMany()
                       .HasForeignKey(rs => rs.ResidenceId)
                       .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // TripStop configuration
+            // ============ TRIP STOP ============
             modelBuilder.Entity<TripStop>(entity =>
             {
                 entity.HasKey(ts => ts.TripStopId);
+                entity.ToTable("TripStops", "dbo");
+
                 entity.HasOne(ts => ts.Trip)
                       .WithMany(t => t.TripStops)
                       .HasForeignKey(ts => ts.TripId)
                       .OnDelete(DeleteBehavior.Cascade);
-              
+
                 entity.HasOne(ts => ts.RouteStop)
-                      .WithMany(rs => rs.TripStops)   // ← specify the collection on RouteStop
+                      .WithMany(rs => rs.TripStops)
                       .HasForeignKey(ts => ts.RouteStopId)
                       .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ============ VEHICLE AVAILABILITY (NEW) ============
+            modelBuilder.Entity<VehicleAvailability>(entity =>
+            {
+                entity.HasKey(e => e.VehicleAvailabilityId);
+                entity.ToTable("VehicleAvailabilities", "dbo");
+                entity.Property(e => e.Reason).HasMaxLength(255);
+                entity.Property(e => e.Date).HasColumnType("date");
+
+                entity.HasIndex(e => new { e.VehicleId, e.Date }).IsUnique();
+
+                entity.HasOne(e => e.Vehicle)
+                    .WithMany()
+                    .HasForeignKey(e => e.VehicleId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ============ TRIP MANIFEST (NEW) ============
+            modelBuilder.Entity<TripManifest>(entity =>
+            {
+                entity.HasKey(e => e.TripManifestId);
+                entity.ToTable("TripManifests", "dbo");
+                entity.Property(e => e.Status).HasMaxLength(20);
+
+                entity.HasIndex(e => e.TripId).IsUnique();
+
+                entity.HasOne(e => e.Trip)
+                    .WithOne()
+                    .HasForeignKey<TripManifest>(e => e.TripId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // ============ TRIP MANIFEST CREDENTIAL (NEW) ============
+            modelBuilder.Entity<TripManifestCredential>(entity =>
+            {
+                entity.HasKey(e => e.TripManifestCredentialId);
+                entity.ToTable("TripManifestCredentials", "dbo");
+                entity.Property(e => e.CredentialUid).HasMaxLength(255);
+                entity.Property(e => e.CredentialType).HasMaxLength(20);
+                entity.Property(e => e.FullName).HasMaxLength(100);
+                entity.Property(e => e.StudentNumber).HasMaxLength(50);
+
+                entity.HasIndex(e => e.CredentialUid);
+                entity.HasIndex(e => e.StudentId);
+
+                entity.HasOne(e => e.TripManifest)
+                    .WithMany(m => m.Credentials)
+                    .HasForeignKey(e => e.TripManifestId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Student)
+                    .WithMany()
+                    .HasForeignKey(e => e.StudentId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.Residence)
+                    .WithMany()
+                    .HasForeignKey(e => e.ResidenceId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ============ TRIP MANIFEST PASSENGER (NEW) ============
+            modelBuilder.Entity<TripManifestPassenger>(entity =>
+            {
+                entity.HasKey(e => e.TripManifestPassengerId);
+                entity.ToTable("TripManifestPassengers", "dbo");
+                entity.Property(e => e.FullName).HasMaxLength(100);
+                entity.Property(e => e.StudentNumber).HasMaxLength(50);
+
+                entity.HasIndex(e => e.StudentId);
+                entity.HasIndex(e => e.HasBoarded);
+
+                entity.HasOne(e => e.TripManifest)
+                    .WithMany(m => m.Passengers)
+                    .HasForeignKey(e => e.TripManifestId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(e => e.Student)
+                    .WithMany()
+                    .HasForeignKey(e => e.StudentId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.Residence)
+                    .WithMany()
+                    .HasForeignKey(e => e.ResidenceId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
         }
     }

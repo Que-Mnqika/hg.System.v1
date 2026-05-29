@@ -447,6 +447,32 @@
   },
   {
     "ContainingType": "HGTSWebApi.Controllers.DeviceController",
+    "Method": "Create",
+    "RelativePath": "api/devices",
+    "HttpMethod": "POST",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "dto",
+        "Type": "HGTSWebApi.DTOs.CreateDeviceDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": [
+      {
+        "Type": "HGTSWebApi.DTOs.DeviceDto",
+        "MediaTypes": [
+          "text/plain",
+          "application/json",
+          "text/json"
+        ],
+        "StatusCode": 200
+      }
+    ]
+  },
+  {
+    "ContainingType": "HGTSWebApi.Controllers.DeviceController",
     "Method": "GetById",
     "RelativePath": "api/devices/{id}",
     "HttpMethod": "GET",
@@ -470,6 +496,64 @@
         "StatusCode": 200
       }
     ]
+  },
+  {
+    "ContainingType": "HGTSWebApi.Controllers.DeviceController",
+    "Method": "Update",
+    "RelativePath": "api/devices/{id}",
+    "HttpMethod": "PUT",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "dto",
+        "Type": "HGTSWebApi.DTOs.UpdateDeviceDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "HGTSWebApi.Controllers.DeviceController",
+    "Method": "PartialUpdate",
+    "RelativePath": "api/devices/{id}",
+    "HttpMethod": "PATCH",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Guid",
+        "IsRequired": true
+      },
+      {
+        "Name": "dto",
+        "Type": "HGTSWebApi.DTOs.UpdateDeviceDto",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
+  },
+  {
+    "ContainingType": "HGTSWebApi.Controllers.DeviceController",
+    "Method": "Delete",
+    "RelativePath": "api/devices/{id}",
+    "HttpMethod": "DELETE",
+    "IsController": true,
+    "Order": 0,
+    "Parameters": [
+      {
+        "Name": "id",
+        "Type": "System.Guid",
+        "IsRequired": true
+      }
+    ],
+    "ReturnTypes": []
   },
   {
     "ContainingType": "HGTSWebApi.Controllers.DeviceController",

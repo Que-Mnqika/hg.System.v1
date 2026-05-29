@@ -26,7 +26,9 @@ C:\hg.System.v1\HGTSWebApi\bin\Debug\net10.0\Microsoft.EntityFrameworkCore.dll
 C:\hg.System.v1\HGTSWebApi\bin\Debug\net10.0\Microsoft.EntityFrameworkCore.Abstractions.dll
 C:\hg.System.v1\HGTSWebApi\bin\Debug\net10.0\Microsoft.EntityFrameworkCore.Design.dll
 C:\hg.System.v1\HGTSWebApi\bin\Debug\net10.0\Microsoft.EntityFrameworkCore.Relational.dll
+C:\hg.System.v1\HGTSWebApi\bin\Debug\net10.0\Microsoft.EntityFrameworkCore.Relational.Design.dll
 C:\hg.System.v1\HGTSWebApi\bin\Debug\net10.0\Microsoft.EntityFrameworkCore.SqlServer.dll
+C:\hg.System.v1\HGTSWebApi\bin\Debug\net10.0\Microsoft.EntityFrameworkCore.SqlServer.Design.dll
 C:\hg.System.v1\HGTSWebApi\bin\Debug\net10.0\Microsoft.Extensions.DependencyModel.dll
 C:\hg.System.v1\HGTSWebApi\bin\Debug\net10.0\Microsoft.Identity.Client.dll
 C:\hg.System.v1\HGTSWebApi\bin\Debug\net10.0\Microsoft.Identity.Client.Extensions.Msal.dll
@@ -43,6 +45,7 @@ C:\hg.System.v1\HGTSWebApi\bin\Debug\net10.0\Mono.TextTemplating.dll
 C:\hg.System.v1\HGTSWebApi\bin\Debug\net10.0\Newtonsoft.Json.dll
 C:\hg.System.v1\HGTSWebApi\bin\Debug\net10.0\Npgsql.dll
 C:\hg.System.v1\HGTSWebApi\bin\Debug\net10.0\Npgsql.EntityFrameworkCore.PostgreSQL.dll
+C:\hg.System.v1\HGTSWebApi\bin\Debug\net10.0\Npgsql.EntityFrameworkCore.PostgreSQL.Design.dll
 C:\hg.System.v1\HGTSWebApi\bin\Debug\net10.0\Swashbuckle.AspNetCore.Swagger.dll
 C:\hg.System.v1\HGTSWebApi\bin\Debug\net10.0\Swashbuckle.AspNetCore.SwaggerGen.dll
 C:\hg.System.v1\HGTSWebApi\bin\Debug\net10.0\Swashbuckle.AspNetCore.SwaggerUI.dll
@@ -158,10 +161,10 @@ C:\hg.System.v1\HGTSWebApi\obj\Debug\net10.0\staticwebassets.build.json.cache
 C:\hg.System.v1\HGTSWebApi\obj\Debug\net10.0\staticwebassets.development.json
 C:\hg.System.v1\HGTSWebApi\obj\Debug\net10.0\staticwebassets.build.endpoints.json
 C:\hg.System.v1\HGTSWebApi\obj\Debug\net10.0\swae.build.ex.cache
-C:\hg.System.v1\HGTSWebApi\obj\Debug\net10.0\staticwebassets.upToDateCheck.txt
 C:\hg.System.v1\HGTSWebApi\obj\Debug\net10.0\HGTSWebApi.csproj.Up2Date
 C:\hg.System.v1\HGTSWebApi\obj\Debug\net10.0\HGTSWebApi.dll
 C:\hg.System.v1\HGTSWebApi\obj\Debug\net10.0\refint\HGTSWebApi.dll
 C:\hg.System.v1\HGTSWebApi\obj\Debug\net10.0\HGTSWebApi.pdb
 C:\hg.System.v1\HGTSWebApi\obj\Debug\net10.0\HGTSWebApi.genruntimeconfig.cache
 C:\hg.System.v1\HGTSWebApi\obj\Debug\net10.0\ref\HGTSWebApi.dll
+C:\hg.System.v1\HGTSWebApi\obj\Debug\net10.0\staticwebassets.upToDateCheck.txt

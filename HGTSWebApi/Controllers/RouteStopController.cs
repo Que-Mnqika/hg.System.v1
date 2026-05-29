@@ -41,8 +41,8 @@ namespace HGTSWebApi.Controllers
                         ResidenceId = rs.ResidenceId,
                         ResidenceName = rs.Residence != null ? rs.Residence.ResidenceName : null,
                         StopOrder = rs.StopOrder,
-                        EstimatedTravelMinutesFromPrevious = rs.EstimatedTravelMinutesFromPrevious,
-                        DwellMinutes = rs.DwellMinutes,
+                        //EstimatedTravelMinutesFromPrevious = rs.EstimatedTravelMinutesFromPrevious,
+                        //DwellMinutes = rs.DwellMinutes,
                         CreatedAt = rs.CreatedAt,
                         UpdatedAt = rs.UpdatedAt
                     })
@@ -79,8 +79,8 @@ namespace HGTSWebApi.Controllers
                     ResidenceId = stop.ResidenceId,
                     ResidenceName = stop.Residence?.ResidenceName,
                     StopOrder = stop.StopOrder,
-                    EstimatedTravelMinutesFromPrevious = stop.EstimatedTravelMinutesFromPrevious,
-                    DwellMinutes = stop.DwellMinutes,
+                    //EstimatedTravelMinutesFromPrevious = stop.EstimatedTravelMinutesFromPrevious,
+                    //DwellMinutes = stop.DwellMinutes,
                     CreatedAt = stop.CreatedAt,
                     UpdatedAt = stop.UpdatedAt
                 });
@@ -120,8 +120,8 @@ namespace HGTSWebApi.Controllers
                     RouteId = dto.RouteId,
                     ResidenceId = dto.ResidenceId,
                     StopOrder = dto.StopOrder,
-                    EstimatedTravelMinutesFromPrevious = dto.EstimatedTravelMinutesFromPrevious,
-                    DwellMinutes = dto.DwellMinutes,
+                    //EstimatedTravelMinutesFromPrevious = dto.EstimatedTravelMinutesFromPrevious,
+                    //DwellMinutes = dto.DwellMinutes,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
@@ -137,8 +137,8 @@ namespace HGTSWebApi.Controllers
                     ResidenceId = routeStop.ResidenceId,
                     ResidenceName = residence.ResidenceName,
                     StopOrder = routeStop.StopOrder,
-                    EstimatedTravelMinutesFromPrevious = routeStop.EstimatedTravelMinutesFromPrevious,
-                    DwellMinutes = routeStop.DwellMinutes,
+                    //EstimatedTravelMinutesFromPrevious = routeStop.EstimatedTravelMinutesFromPrevious,
+                    //DwellMinutes = routeStop.DwellMinutes,
                     CreatedAt = routeStop.CreatedAt,
                     UpdatedAt = routeStop.UpdatedAt
                 };
@@ -209,8 +209,8 @@ namespace HGTSWebApi.Controllers
                             RouteId = dto.RouteId,
                             ResidenceId = dto.ResidenceId,
                             StopOrder = dto.StopOrder,
-                            EstimatedTravelMinutesFromPrevious = dto.EstimatedTravelMinutesFromPrevious,
-                            DwellMinutes = dto.DwellMinutes,
+                            //EstimatedTravelMinutesFromPrevious = dto.EstimatedTravelMinutesFromPrevious,
+                            //DwellMinutes = dto.DwellMinutes,
                             CreatedAt = DateTime.UtcNow,
                             UpdatedAt = DateTime.UtcNow
                         };
@@ -225,8 +225,8 @@ namespace HGTSWebApi.Controllers
                             ResidenceId = routeStop.ResidenceId,
                             ResidenceName = residence.ResidenceName,
                             StopOrder = routeStop.StopOrder,
-                            EstimatedTravelMinutesFromPrevious = routeStop.EstimatedTravelMinutesFromPrevious,
-                            DwellMinutes = routeStop.DwellMinutes,
+                            //EstimatedTravelMinutesFromPrevious = routeStop.EstimatedTravelMinutesFromPrevious,
+                            //DwellMinutes = routeStop.DwellMinutes,
                             CreatedAt = routeStop.CreatedAt,
                             UpdatedAt = routeStop.UpdatedAt
                         });
@@ -275,11 +275,14 @@ namespace HGTSWebApi.Controllers
                     routeStop.StopOrder = dto.StopOrder.Value;
                 }
 
-                if (dto.EstimatedTravelMinutesFromPrevious.HasValue)
-                    routeStop.EstimatedTravelMinutesFromPrevious = dto.EstimatedTravelMinutesFromPrevious.Value;
+                if (dto.ResidenceId.HasValue)
+                    routeStop.ResidenceId = dto.ResidenceId.Value;
 
-                if (dto.DwellMinutes.HasValue)
-                    routeStop.DwellMinutes = dto.DwellMinutes.Value;
+                //if (dto.EstimatedTravelMinutesFromPrevious.HasValue)
+                //    routeStop.EstimatedTravelMinutesFromPrevious = dto.EstimatedTravelMinutesFromPrevious.Value;
+
+                //if (dto.DwellMinutes.HasValue)
+                //    routeStop.DwellMinutes = dto.DwellMinutes.Value;
 
                 routeStop.UpdatedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();

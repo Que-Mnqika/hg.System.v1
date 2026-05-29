@@ -9,8 +9,8 @@ namespace HGTSWebApi.DTOs
         public Guid ResidenceId { get; set; }
         public string? ResidenceName { get; set; }
         public int StopOrder { get; set; }
-        public int EstimatedTravelMinutesFromPrevious { get; set; }
-        public int DwellMinutes { get; set; }
+        //public int EstimatedTravelMinutesFromPrevious { get; set; }
+        //public int DwellMinutes { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }
@@ -20,14 +20,15 @@ namespace HGTSWebApi.DTOs
         public Guid RouteId { get; set; }
         public Guid ResidenceId { get; set; }
         public int StopOrder { get; set; }
-        public int EstimatedTravelMinutesFromPrevious { get; set; } = 5; // default
-        public int DwellMinutes { get; set; } = 2;
+        //public int EstimatedTravelMinutesFromPrevious { get; set; } = 5; // default
+        //public int DwellMinutes { get; set; } = 2;
     }
 
     public class UpdateRouteStopDto
     {
         public int? StopOrder { get; set; }
-        public int? EstimatedTravelMinutesFromPrevious { get; set; }
-        public int? DwellMinutes { get; set; }
+        public Guid? ResidenceId { get; set; }
+        //public int? EstimatedTravelMinutesFromPrevious { get; set; }
+        //public int? DwellMinutes { get; set; }
     }
 }

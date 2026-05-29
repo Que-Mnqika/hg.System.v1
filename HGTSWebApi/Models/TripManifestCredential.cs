@@ -1,18 +1,22 @@
-using System.Text.Json.Serialization;
+using System;
+
 namespace HGTSWebApi.Models
 {
     public class TripManifestCredential
     {
         public Guid TripManifestCredentialId { get; set; }
-        public Guid TripManifestPassengerId { get; set; }
-        public Guid CredentialId { get; set; }
-        public string CredentialToken { get; set; } = null!;
-        public string CredentialType { get; set; } = null!;
-        public bool IsActive { get; set; } = true;
+        public Guid TripManifestId { get; set; }
+        public string CredentialUid { get; set; } = string.Empty;
+        public string CredentialType { get; set; } = string.Empty;
+        public Guid StudentId { get; set; }
+        public string? FullName { get; set; }
+        public string? StudentNumber { get; set; }
+        public Guid? ResidenceId { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-        [JsonIgnore]
-        public virtual TripManifestPassenger TripManifestPassenger { get; set; } = null!;
-        [JsonIgnore]
-        public virtual NFCCredential Credential { get; set; } = null!;
+        // Navigation properties
+        public virtual TripManifest TripManifest { get; set; } = null!;
+        public virtual Student Student { get; set; } = null!;
+        public virtual Residence? Residence { get; set; }
     }
 }

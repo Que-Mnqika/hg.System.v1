@@ -7,6 +7,7 @@ namespace HGTSWebApi.DTOs
         public Guid DeviceId { get; set; }
         public string DeviceIdentifier { get; set; } = string.Empty;
         public string? DeviceName { get; set; }
+
         public string? FirmwareVersion { get; set; }
         public string? HardwareVersion { get; set; }
         public DateTime? LastSeen { get; set; }
@@ -40,6 +41,7 @@ namespace HGTSWebApi.DTOs
 
     public class UpdateDeviceDto
     {
+        public string? DeviceIdentifier { get; set; }
         public string? DeviceName { get; set; }
         public string? FirmwareVersion { get; set; }
         public string? HardwareVersion { get; set; }
