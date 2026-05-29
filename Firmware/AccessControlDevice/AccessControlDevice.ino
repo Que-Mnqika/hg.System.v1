@@ -17,7 +17,7 @@
 // ============================================================================
 //  DEBUG CONFIGURATION
 // ============================================================================
-bool DEBUG_API = true;  // Set to false to disable API debug output (can be toggled at runtime)
+bool DEBUG_API = true;
 
 // ============================================================================
 //  PIN DEFINITIONS
@@ -30,8 +30,8 @@ bool DEBUG_API = true;  // Set to false to disable API debug output (can be togg
 #define LED_GREEN   25
 #define LED_BLUE    26
 #define BUZZER_PIN  14
-#define OLED_SDA    22
-#define OLED_SCL    21
+#define OLED_SDA    21
+#define OLED_SCL    22
 
 // ============================================================================
 //  OLED DISPLAY
@@ -42,26 +42,17 @@ bool DEBUG_API = true;  // Set to false to disable API debug output (can be togg
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 // ============================================================================
-//  NETWORK & SERVER CONFIGURATION
+//  NETWORK & SERVER CONFIGURATION (No Static IP)
 // ============================================================================
-// Primary Network (HGTS HQ)
-const char* primary_ssid       = "Galaxy A16 5G e6ba";
-const char* primary_password   = "hgtsDevs";
+const char* primary_ssid      = "Galaxy A16 5G e604";
+const char* primary_password  = "HGTS1234";
 
-// Fallback Network (Phone Hotspot) - CHANGE THESE
-const char* fallback_ssid      = "YourPhoneHotspot";
-const char* fallback_password  = "HotspotPassword";
+const char* fallback_ssid       = "TORIO08 Network";
+const char* fallback_password   = "Hgts349517";
 
-// Static IP Configuration for Primary Network
-bool use_static_ip = true;
-IPAddress static_ip(192, 168, 11, 100);
-IPAddress gateway(192, 168, 11, 1);
-IPAddress subnet(255, 255, 255, 0);
-IPAddress dns(8, 8, 8, 8);
-
-const char* serverHost = "10.27.26.125";
+const char* serverHost = "10.83.190.125";
 const int   serverPort = 5277;
-const char* deviceId   = "2501c157-a6f2-4080-8e1b-28c936d203c2";
+const char* deviceId   = "7e17adbf-2dae-4f78-bc63-d01efe61511b";
 
 HTTPClient http;
 Preferences prefs;
@@ -94,12 +85,14 @@ const int SELECT_AID_LEN = 11;
 // ============================================================================
 //  TIMING
 // ============================================================================
-#define CONFIG_REFRESH_INTERVAL_MS  60000
-#define NTP_SYNC_INTERVAL_MS        7200000
-#define SYNC_RETRY_INTERVAL_MS      60000
-#define HEARTBEAT_INTERVAL_MS       120000
+#define CONFIG_REFRESH_INTERVAL_MS  30000
+#define NTP_SYNC_INTERVAL_MS        3600000
+#define SYNC_RETRY_INTERVAL_MS      30000
+#define HEARTBEAT_INTERVAL_MS       5000
 #define WEATHER_REFRESH_INTERVAL_MS 900000
 #define PN532_RESET_INTERVAL_MS     30000
+#define TRIP_STATUS_CHECK_INTERVAL  1000
+#define DISPLAY_UPDATE_INTERVAL_MS  60000  // 60 seconds - UPDATED
 
 // ============================================================================
 //  DATA STRUCTURES
@@ -144,6 +137,10 @@ struct TripConfig {
   unsigned long startTime;
   unsigned long endTime;
   bool  isActive;
+  bool  autoStartSent;
+  bool  autoEndSent;
+  unsigned long scheduledStartEpoch;
+  unsigned long scheduledEndEpoch;
 };
 
 struct ManifestToken {
@@ -153,6 +150,14 @@ struct ManifestToken {
   char fullName[48];
   char type[6];
 };
+
+// ============================================================================
+//  FUNCTION PROTOTYPES
+// ============================================================================
+void updateDisplay();
+bool isTripActive();
+void endTrip();
+void checkTripExpiry();
 
 // ============================================================================
 //  GLOBALS
@@ -175,8 +180,10 @@ unsigned long lastConfigRefresh = 0;
 unsigned long lastSyncAttempt   = 0;
 unsigned long lastNtpAttempt    = 0;
 unsigned long lastHeartbeat     = 0;
+unsigned long lastTripStatusCheck = 0;
 unsigned long bootTime          = 0;
 unsigned long bootEpoch         = 0;
+unsigned long lastDisplayUpdate = 0;
 
 OfflineTap     offlineTaps[MAX_OFFLINE_TAPS];
 int            offlineTapCount = 0;
@@ -186,7 +193,6 @@ int            boardedCount = 0;
 ManifestToken  manifest[MAX_MANIFEST_TOKENS];
 int            manifestCount = 0;
 
-// Weather cache
 String currentWeather = "";
 float currentTemp = 0;
 
@@ -216,7 +222,7 @@ void debugPrintApi(String url, String method, String body, int httpCode, String 
 }
 
 // ============================================================================
-//  TIME HELPERS
+//  TIME HELPERS (Seconds removed from formatted time)
 // ============================================================================
 unsigned long getUtcEpoch() {
   struct tm timeinfo;
@@ -239,11 +245,11 @@ String getReadableTime() {
 String getFormattedTime() {
   struct tm timeinfo;
   if (timeSynced && getLocalTime(&timeinfo, 0)) {
-    char buf[9];
-    strftime(buf, sizeof(buf), "%H:%M:%S", &timeinfo);
+    char buf[6];  // HH:MM only (no seconds)
+    strftime(buf, sizeof(buf), "%H:%M", &timeinfo);
     return String(buf);
   }
-  return String(millis() / 1000) + "s";
+  return String(millis() / 60000) + "m";  // minutes since boot
 }
 
 String getFormattedDate() {
@@ -273,6 +279,57 @@ void syncTimeInBackground() {
     configTime(7200, 0, "pool.ntp.org", "time.nist.gov");
     struct tm t; getLocalTime(&t, 500);
   }
+}
+
+// ============================================================================
+//  TRIP AUTO START/END FUNCTIONS
+// ============================================================================
+bool callTripStart(String tripId) {
+  if (!wifiConnected || !apiReachable) return false;
+  
+  String url = "http://" + String(serverHost) + ":" + String(serverPort) +
+               "/api/trips/" + tripId + "/start";
+  http.begin(url);
+  http.addHeader("Content-Type", "application/json");
+  http.setTimeout(5000);
+  
+  int code = http.POST("{}");
+  String response = http.getString();
+  http.end();
+  
+  if (DEBUG_API) {
+    debugPrintApi(url, "POST", "{}", code, response);
+  }
+  
+  if (code == 200) {
+    Serial.printf("✅ Auto-started trip %s\n", tripId.c_str());
+    return true;
+  }
+  return false;
+}
+
+bool callTripEnd(String tripId) {
+  if (!wifiConnected || !apiReachable) return false;
+  
+  String url = "http://" + String(serverHost) + ":" + String(serverPort) +
+               "/api/trips/" + tripId + "/end";
+  http.begin(url);
+  http.addHeader("Content-Type", "application/json");
+  http.setTimeout(5000);
+  
+  int code = http.POST("{}");
+  String response = http.getString();
+  http.end();
+  
+  if (DEBUG_API) {
+    debugPrintApi(url, "POST", "{}", code, response);
+  }
+  
+  if (code == 200) {
+    Serial.printf("✅ Auto-ended trip %s\n", tripId.c_str());
+    return true;
+  }
+  return false;
 }
 
 // ============================================================================
@@ -306,7 +363,7 @@ void fetchWeather() {
 }
 
 // ============================================================================
-//  OLED DISPLAY
+//  CLEAN OLED DISPLAY - Just clock with border (no seconds)
 // ============================================================================
 void initDisplay() {
   Wire.begin(OLED_SDA, OLED_SCL);
@@ -324,62 +381,73 @@ void updateDisplay() {
   if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) return;
   
   display.clearDisplay();
-  display.setTextSize(1);
-  display.setCursor(0, 0);
+  
+  // Draw border only
+  display.drawRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, SSD1306_WHITE);
   
   if (hasActiveTrip && isTripActive()) {
-    display.setTextSize(2);
-    display.setCursor(0, 0);
-    display.printf("%d/%d", currentTrip.currentPassengers, currentTrip.vehicleCapacity);
-    
+    // Active trip info
     display.setTextSize(1);
-    display.setCursor(0, 18);
-    display.printf("Next Seat: %d", currentTrip.nextSeatNumber);
+    display.setCursor(4, 4);
+    display.print("🚌 ACTIVE TRIP");
     
-    display.setCursor(0, 28);
-    display.printf("%s", currentTrip.routeName);
+    display.setTextSize(2);
+    display.setCursor(20, 18);
+    display.printf("%d", currentTrip.currentPassengers);
+    display.setTextSize(1);
+    display.setCursor(70, 22);
+    display.printf("/%d", currentTrip.vehicleCapacity);
     
+    display.setCursor(4, 36);
+    display.print("Seat:");
+    display.setCursor(40, 36);
+    display.printf("%d", currentTrip.nextSeatNumber);
+    
+    display.setCursor(4, 48);
+    display.print("Left:");
     unsigned long remaining = (currentTrip.endTime - millis()) / 60000;
-    display.setCursor(0, 38);
-    display.printf("Left: %lum", remaining);
+    display.setCursor(40, 48);
+    display.printf("%lum", remaining);
     
-    display.setCursor(0, 50);
-    display.printf("%s", getFormattedTime().c_str());
+    display.setCursor(85, 48);
+    display.print(getFormattedTime().c_str());
     
   } else if (displaySleepMode) {
+    // Sleep mode - big clock (no seconds)
     display.setTextSize(2);
-    display.setCursor(0, 0);
+    display.setCursor(15, 8);
     display.printf("%s", getFormattedTime().c_str());
     
     display.setTextSize(1);
-    display.setCursor(0, 20);
+    display.setCursor(4, 36);
     display.printf("%s", getFormattedDate().c_str());
     
     if (currentWeather.length() > 0 && currentTemp != 0) {
-      display.setCursor(0, 35);
+      display.setCursor(4, 48);
       display.printf("%.0fC %s", currentTemp, currentWeather.c_str());
     } else if (currentWeather.length() > 0) {
-      display.setCursor(0, 35);
+      display.setCursor(4, 48);
       display.printf("%s", currentWeather.c_str());
     }
     
-    display.setCursor(0, 50);
+    display.setCursor(4, 58);
     display.printf("WiFi:%s", wifiConnected ? "ON" : "OFF");
     
   } else {
+    // Idle display - simple clock (no seconds)
     display.setTextSize(2);
-    display.setCursor(0, 0);
-    display.printf("HGTS");
+    display.setCursor(15, 8);
+    display.printf("%s", getFormattedTime().c_str());
     
     display.setTextSize(1);
-    display.setCursor(0, 20);
-    display.printf("Tap to board");
+    display.setCursor(4, 36);
+    display.printf("%s", getFormattedDate().c_str());
     
-    display.setCursor(0, 35);
-    display.printf("WiFi:%s", wifiConnected ? "OK" : "OFF");
+    display.setCursor(4, 48);
+    display.printf("Tap NFC card");
     
-    display.setCursor(0, 50);
-    display.printf("%s", getFormattedTime().c_str());
+    display.setCursor(4, 58);
+    display.printf("WiFi:%s", wifiConnected ? "ON" : "OFF");
   }
   
   display.display();
@@ -432,7 +500,6 @@ void feedbackGranted(String name = "", String studentId = "", int seatNumber = 0
   buzzPattern(1);
   delay(300); allLedsOff();
   lastActivityTime = millis();
-  updateDisplay();
 }
 
 void feedbackMismatch(String studentRes = "", String tripRes = "") {
@@ -441,7 +508,6 @@ void feedbackMismatch(String studentRes = "", String tripRes = "") {
   buzzPattern(2);
   delay(300); allLedsOff();
   lastActivityTime = millis();
-  updateDisplay();
 }
 
 void feedbackDenied(String reason = "") {
@@ -450,7 +516,6 @@ void feedbackDenied(String reason = "") {
   buzzPattern(3);
   delay(300); allLedsOff();
   lastActivityTime = millis();
-  updateDisplay();
 }
 
 void feedbackOverload(String name = "") {
@@ -462,7 +527,6 @@ void feedbackOverload(String name = "") {
   }
   delay(300); allLedsOff();
   lastActivityTime = millis();
-  updateDisplay();
 }
 
 void feedbackOfflineStorage(String resultCode = "PENDING") {
@@ -510,26 +574,6 @@ void incrementSeatNumber() {
   if (currentTrip.nextSeatNumber > currentTrip.vehicleCapacity) {
     currentTrip.nextSeatNumber = currentTrip.vehicleCapacity;
   }
-}
-
-void updateVehicleCapacityFromBackend() {
-  if (!wifiConnected || !apiReachable) return;
-  
-  String url = "http://" + String(serverHost) + ":" + String(serverPort) +
-               "/api/vehicles/" + String(currentTrip.vehicleId) + "/capacity";
-  http.begin(url);
-  http.setTimeout(3000);
-  int code = http.GET();
-  
-  if (code == 200) {
-    String response = http.getString();
-    StaticJsonDocument<256> doc;
-    if (deserializeJson(doc, response) == DeserializationError::Ok) {
-      currentTrip.vehicleCapacity = doc["capacity"] | 50;
-      currentTrip.currentPassengers = doc["currentPassengers"] | boardedCount;
-    }
-  }
-  http.end();
 }
 
 // ============================================================================
@@ -748,7 +792,6 @@ bool addBoardedStudent(String studentId, String token, String residenceId) {
     
     Serial.printf("   👥 Boarded: %s | Seat: %d | Total: %d/%d\n", 
                   studentId.c_str(), seatNumber, boardedCount, currentTrip.vehicleCapacity);
-    updateDisplay();
     return true;
   }
   return false;
@@ -855,7 +898,7 @@ bool isResidenceInTripStops(String residenceId) {
 
 void startNewTrip(String tripId, String routeId, String routeName,
                   String residenceId, String residenceName, int durationMinutes,
-                  int vehicleId) {
+                  int vehicleId, unsigned long scheduledStartEpoch, unsigned long scheduledEndEpoch) {
   bool isNewTrip = (String(currentTrip.tripId) != tripId);
   
   if (isNewTrip) {
@@ -864,6 +907,8 @@ void startNewTrip(String tripId, String routeId, String routeName,
     manifestCount  = 0;
     currentTrip.stopCount = 0;
     currentTrip.nextSeatNumber = 1;
+    currentTrip.autoStartSent = false;
+    currentTrip.autoEndSent = false;
   }
 
   tripId.toCharArray(currentTrip.tripId,           37);
@@ -876,9 +921,9 @@ void startNewTrip(String tripId, String routeId, String routeName,
   currentTrip.startTime = millis();
   currentTrip.endTime   = currentTrip.startTime + ((unsigned long)durationMinutes * 60000UL);
   currentTrip.isActive  = true;
+  currentTrip.scheduledStartEpoch = scheduledStartEpoch;
+  currentTrip.scheduledEndEpoch = scheduledEndEpoch;
   hasActiveTrip = true;
-
-  updateVehicleCapacityFromBackend();
 
   if (isNewTrip) {
     if (wifiConnected && apiReachable) {
@@ -888,7 +933,6 @@ void startNewTrip(String tripId, String routeId, String routeName,
     }
     loadBoardedStudentsFromNVS();
   }
-  updateDisplay();
 }
 
 bool isTripActive() {
@@ -902,12 +946,34 @@ void endTrip() {
     manifestCount  = 0;
     hasActiveTrip  = false;
     currentTrip.stopCount = 0;
-    updateDisplay();
+    currentTrip.autoStartSent = false;
+    currentTrip.autoEndSent = false;
   }
 }
 
 void checkTripExpiry() {
   if (hasActiveTrip && !isTripActive()) endTrip();
+}
+
+void checkAndAutoManageTrip() {
+  if (!hasActiveTrip || !timeSynced) return;
+  
+  unsigned long nowEpoch = getUtcEpoch();
+  
+  if (!currentTrip.autoStartSent && currentTrip.scheduledStartEpoch > 0 && nowEpoch >= currentTrip.scheduledStartEpoch) {
+    Serial.printf("⏰ Scheduled start time reached for trip %s\n", currentTrip.tripId);
+    if (callTripStart(String(currentTrip.tripId))) {
+      currentTrip.autoStartSent = true;
+    }
+  }
+  
+  if (!currentTrip.autoEndSent && currentTrip.scheduledEndEpoch > 0 && nowEpoch >= currentTrip.scheduledEndEpoch) {
+    Serial.printf("⏰ Scheduled end time reached for trip %s\n", currentTrip.tripId);
+    if (callTripEnd(String(currentTrip.tripId))) {
+      currentTrip.autoEndSent = true;
+      endTrip();
+    }
+  }
 }
 
 // ============================================================================
@@ -935,7 +1001,7 @@ void sendHeartbeat() {
   http.end();
   
   if (DEBUG_API && code == 200) {
-    Serial.println("❤️ Heartbeat sent");
+    Serial.println("❤️ Heartbeat sent (5s)");
   }
 }
 
@@ -973,10 +1039,28 @@ bool fetchActiveTripFromBackend() {
   int durationMinutes  = doc["durationMinutes"] | 30;
   int vehicleId        = doc["vehicleId"]     | 0;
   int vehicleCapacity  = doc["vehicleCapacity"] | 50;
+  
+  unsigned long scheduledStartEpoch = 0;
+  unsigned long scheduledEndEpoch = 0;
+  
+  if (doc["scheduledStartTime"]) {
+    String startStr = doc["scheduledStartTime"].as<String>();
+    struct tm tm;
+    strptime(startStr.c_str(), "%Y-%m-%dT%H:%M:%S", &tm);
+    scheduledStartEpoch = mktime(&tm);
+  }
+  
+  if (doc["scheduledEndTime"]) {
+    String endStr = doc["scheduledEndTime"].as<String>();
+    struct tm tm;
+    strptime(endStr.c_str(), "%Y-%m-%dT%H:%M:%S", &tm);
+    scheduledEndEpoch = mktime(&tm);
+  }
 
   if (tripId != String(currentTrip.tripId) || !hasActiveTrip) {
     startNewTrip(tripId, routeId, routeName,
-                 residenceId, residenceName, durationMinutes, vehicleId);
+                 residenceId, residenceName, durationMinutes, vehicleId,
+                 scheduledStartEpoch, scheduledEndEpoch);
     currentTrip.vehicleCapacity = vehicleCapacity;
   }
 
@@ -1016,7 +1100,6 @@ void sendToBackend(String token, String type, String rawUid) {
     return;
   }
 
-  // ONLINE PATH
   if (wifiConnected && apiReachable) {
     String url = "http://" + String(serverHost) + ":" + String(serverPort) +
                  "/api/boarding/validate";
@@ -1036,7 +1119,6 @@ void sendToBackend(String token, String type, String rawUid) {
     String body;
     serializeJson(doc, body);
     
-    // Debug output
     if (DEBUG_API) {
       debugPrintApi(url, "POST", body, 0, "");
     }
@@ -1044,7 +1126,6 @@ void sendToBackend(String token, String type, String rawUid) {
     int code = http.POST(body);
     String resp = http.getString();
     
-    // Debug response
     if (DEBUG_API) {
       debugPrintApi(url, "POST", body, code, resp);
     }
@@ -1086,7 +1167,6 @@ void sendToBackend(String token, String type, String rawUid) {
     http.end();
   }
 
-  // OFFLINE PATH
   if (manifestLoaded && manifestCount > 0) {
     String studentId, name, residenceId;
     String result = validateOffline(token, studentId, name, residenceId);
@@ -1153,7 +1233,7 @@ bool extractToken(String &token) {
 }
 
 // ============================================================================
-//  WIFI with DUAL NETWORK and STATIC IP SUPPORT
+//  WIFI (No Static IP - DHCP only)
 // ============================================================================
 void fixMACAddress() {
   uint8_t mac[6]; uint64_t id = ESP.getEfuseMac();
@@ -1164,15 +1244,8 @@ void fixMACAddress() {
   WiFi.mode(WIFI_STA); delay(100);
 }
 
-bool connectToNetwork(const char* ssid, const char* password, bool useStaticIP = false) {
+bool connectToNetwork(const char* ssid, const char* password) {
   Serial.printf("\n📡 Connecting to %s\n", ssid);
-  
-  if (useStaticIP && use_static_ip) {
-    Serial.printf("   Using Static IP: %s\n", static_ip.toString().c_str());
-    if (!WiFi.config(static_ip, gateway, subnet, dns)) {
-      Serial.println("   Failed to configure Static IP, using DHCP");
-    }
-  }
   
   WiFi.begin(ssid, password);
   int attempts = 0;
@@ -1197,21 +1270,18 @@ bool connectToNetwork(const char* ssid, const char* password, bool useStaticIP =
 void connectToWiFi() {
   wifiConnected = false;
   
-  // Try Primary Network (with Static IP if configured)
-  if (connectToNetwork(primary_ssid, primary_password, true)) {
-    Serial.println("✅ Connected to Primary Network (HGTS HQ)");
+  if (connectToNetwork(primary_ssid, primary_password)) {
+    Serial.println("✅ Connected to Primary Network (Galaxy Phone)");
     return;
   }
   
   Serial.println("⚠️ Primary network failed, trying fallback...");
   
-  // Try Fallback Network (Hotspot - always DHCP)
-  if (connectToNetwork(fallback_ssid, fallback_password, false)) {
-    Serial.println("✅ Connected to Fallback Network (Phone Hotspot)");
+  if (connectToNetwork(fallback_ssid, fallback_password)) {
+    Serial.println("✅ Connected to Fallback Network (HGTS HQ)");
     return;
   }
   
-  // Both networks failed
   wifiConnected = false;
   Serial.println("❌ All WiFi networks failed — OFFLINE mode");
 }
@@ -1317,9 +1387,8 @@ void setup() {
   bootTime = millis();
 
   Serial.println("\n╔════════════════════════════════════════════╗");
-  Serial.println("║     HGTS NFC VALIDATOR v2.1 OPTIMIZED     ║");
-  Serial.println("║        DUAL WIFI + STATIC IP READY        ║");
-  Serial.println("║           DEBUG MODE AVAILABLE            ║");
+  Serial.println("║     HGTS NFC VALIDATOR v3.0 SMART BUS     ║");
+  Serial.println("║     AUTO TRIP START/END + LIVE DISPLAY    ║");
   Serial.println("╚════════════════════════════════════════════╝");
 
   esp_err_t ret = nvs_flash_init();
@@ -1366,7 +1435,7 @@ void setup() {
   updateDisplay();
   printSystemStatus();
   Serial.println("\n✅ READY — tap a card or type 'menu'\n");
-  Serial.println("💡 Tip: Type 'menu' and press 8 to toggle debug mode\n");
+  Serial.println("💡 Features: Auto trip start/end | Live time | 5s heartbeat\n");
   lastActivityTime = millis();
 }
 
@@ -1377,66 +1446,63 @@ void loop() {
   unsigned long now = millis();
 
   syncTimeInBackground();
+  checkAndAutoManageTrip();
 
-  // Sleep mode after inactivity
+  // Update display every 60 seconds (minutes only)
+  if (now - lastDisplayUpdate >= DISPLAY_UPDATE_INTERVAL_MS) {
+    lastDisplayUpdate = now;
+    updateDisplay();
+  }
+
   if (!displaySleepMode && (now - lastActivityTime > INACTIVITY_TIMEOUT_MS) && !hasActiveTrip) {
     displaySleepMode = true;
     if (wifiConnected && apiReachable && (now - lastWeatherUpdate > WEATHER_REFRESH_INTERVAL_MS)) {
       fetchWeather();
     }
-    updateDisplay();
+    updateDisplay();  // Update when entering sleep mode
   }
   
   if (hasActiveTrip && displaySleepMode) {
     displaySleepMode = false;
-    updateDisplay();
+    updateDisplay();  // Update when exiting sleep mode
   }
 
-  // Periodic weather refresh in sleep mode
   if (displaySleepMode && wifiConnected && apiReachable && 
       (now - lastWeatherUpdate > WEATHER_REFRESH_INTERVAL_MS)) {
     fetchWeather();
-    updateDisplay();
+    updateDisplay();  // Update when weather refreshes
   }
 
-  // Serial menu
   if (Serial.available()) {
     String in = Serial.readString(); in.trim(); in.toLowerCase();
     if (in == "menu") { serialMenuActive = true; showSerialMenu(); }
   }
   if (serialMenuActive) { handleSerialMenu(); return; }
 
-  // WiFi watchdog with fallback network retry
   if (now - lastWifiCheck > 60000) {
     lastWifiCheck = now;
     if (WiFi.status() != WL_CONNECTED) {
       wifiConnected = false;
-      Serial.println("⚠️ WiFi disconnected, reconnecting...");
       connectToWiFi();
       if (wifiConnected) { testAPIConnection(); }
     } else if (!apiReachable) {
       testAPIConnection();
     }
     if (wifiConnected && apiReachable) fetchActiveTripFromBackend();
-    updateDisplay();
   }
 
-  // Trip poll
   if (wifiConnected && apiReachable &&
       (now - lastConfigRefresh > CONFIG_REFRESH_INTERVAL_MS)) {
     lastConfigRefresh = now;
     fetchActiveTripFromBackend();
-    updateDisplay();
   }
 
-  // Heartbeat
   if (wifiConnected && apiReachable &&
       (now - lastHeartbeat > HEARTBEAT_INTERVAL_MS)) {
     lastHeartbeat = now;
     sendHeartbeat();
   }
 
-  // Offline sync
   if (wifiConnected && apiReachable && offlineTapCount > 0 &&
       (now - lastSyncAttempt > SYNC_RETRY_INTERVAL_MS)) {
     lastSyncAttempt = now;
@@ -1445,11 +1511,9 @@ void loop() {
 
   checkTripExpiry();
 
-  // Tap debounce
   if (now - lastTapTime < POST_TAP_DELAY_MS) return;
   if (!nfcReady) { delay(100); return; }
 
-  // Reset PN532 if stuck
   if (pn532FailCount > 10 && (now - lastPn532Reset > PN532_RESET_INTERVAL_MS)) {
     nfc.begin();
     nfc.SAMConfig();
@@ -1473,7 +1537,6 @@ void loop() {
     updateDisplay();
   }
 
-  // Build raw UID string
   String rawUid = "";
   for (uint8_t i = 0; i < uidLen; i++) {
     if (uid[i] < 0x10) rawUid += "0";
@@ -1481,7 +1544,6 @@ void loop() {
   }
   rawUid.toUpperCase();
 
-  // Try HCE (phone) first, fall back to physical card
   String token = "";
   bool isPhone = extractToken(token);
   if (isPhone) {
